@@ -104,10 +104,15 @@ end
 # - Convert references to pointers
 # - Replace templated types with their C counterpart
 function get_c_type(cursor)
+    original_spelling = spelling(cursor)
+    if original_spelling == "va_list"
+        return false, "va_list"
+    end
+
     # If this is a function pointer, just return the spelling. This will
     # preserve the original spelling like 'ImFuncPtr(...)' etc.
     if is_fn_pointer(cursor)
-        return false, spelling(cursor)
+        return false, original_spelling
     end
 
     type = Clang.getCanonicalType(cursor)
@@ -138,7 +143,7 @@ function get_c_type(cursor)
     if type_spelling == "__va_list_tag[1]"
         # Special case for ImGuiTestContext_LogExV
         type_spelling = "va_list"
-    elseif type_spelling == "_IO_FILE"
+    elseif type_spelling in ("_IO_FILE", "__sFILE")
         # Special case for ImGuiCaptureContext::_VideoEncoderPipe
         type_spelling = "FILE"
     end
