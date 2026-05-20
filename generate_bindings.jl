@@ -592,24 +592,22 @@ end
 function generate()
     imgui_root = joinpath(@__DIR__, "cimgui", "imgui")
     te_root = joinpath(@__DIR__, "imgui_test_engine", "imgui_test_engine")
+    # Parse against the bundled x86_64-apple-darwin14 sysroot. The output
+    # (cimgui_te.h / cimgui_te.cpp) is platform-independent C, but `uint64_t`
+    # canonicalisation depends on the host typedef — darwin defines it as
+    # `unsigned long long` (8 bytes everywhere, including Windows LLP64),
+    # while glibc defines it as `unsigned long` (which is 4 bytes on Windows).
     args = ["-x", "c++", "-I$(imgui_root)", "-I$(te_root)",
             "-DIMGUI_DISABLE_OBSOLETE_FUNCTIONS=1",
-            "-DIMGUI_TEST_ENGINE_ENABLE_COROUTINE_STDTHREAD_IMPL=1"]
-
-    # Find the system #include directories to avoid missing header warnings
-    stderr_pipe = Pipe()
-    run(pipeline(`$(Clang_jll.clang()) -v -c -x c++ /dev/null`; stderr=stderr_pipe))
-    close(stderr_pipe.in)
-    record = false
-    for l in eachline(stderr_pipe)
-        if startswith(l, "#include <...> search starts here")
-            record = true
-        elseif startswith(l, "End of search list")
-            break
-        elseif record
-            push!(args, "-I$(strip(l))")
-        end
-    end
+            "-DIMGUI_TEST_ENGINE_ENABLE_COROUTINE_STDTHREAD_IMPL=1",
+            # Shadow the sysroot's gcc 4.8.5 `xmmintrin.h` with Clang's own
+            # builtin-aware version (gcc's relies on __builtin_ia32_*
+            # intrinsics that Clang_jll's clang-15 doesn't define for x86
+            # when host is aarch64). Listed first so it wins the -isystem
+            # search.
+            "-isystem", joinpath(dirname(dirname(Clang_jll.libclang_path)),
+                                 "lib", "clang", "15.0.7", "include"),
+            Clang.Generators.get_default_args("x86_64-apple-darwin14")...]
 
     # These functions need to be wrapped in a #ifdef
     stdthread_funcs = ["Coroutine_ImplStdThread_GetInterface"]
